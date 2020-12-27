@@ -4,4 +4,3 @@ TEST_NET = "eth2"
 CURRENT_NET = DEVLOPMENT_NET
 
 INVITES_PORT = 13117
-INVITE_MESSAGE = bytes([0xfe, 0xed, 0xbe, 0xef, 0x2, 0x81, 0xd])
