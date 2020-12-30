@@ -15,6 +15,17 @@ GROUP = 5
 
 GAME_TIME = 10
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 class ServerState(Enum):
     SENDING_INVITES = auto()
     IN_GAME = auto()
@@ -26,34 +37,52 @@ class Server():
         self.ip_address = config.MY_IP
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # enable broadcasts
-        self.invite = pack('IbH', 0xfeedbeef, 2, 2077)
+        self.invite = pack('!IbH', 0xfeedbeef, 2, 2077)
         self.clients = []
         self.group_1 = []
         self.group_2 = []
         self.server = None
         self.end_time = 0
         self.game_counter = 0
+        self.end_msg = None
 
     async def make_game(self):
-        async def make_client_listener(client, game_counter):
-            while self.state == ServerState.IN_GAME and game_counter == self.game_counter:
-                reader: asyncio.StreamReader = client[READER]
-                chars = (await reader.read(1)).decode()
-                print(f"got message from {client[NAME]}: {chars}")
-                client[COUNTER] += len(chars)
-            client[WRITER].close()
-        # async def print_game_results(self):
-        #     if self.state == ServerState.SENDING_INVITES:
-        #         print(self.end_game_message())
+        async def make_client_listener(client, game_counter, first_msg):
+            try:
+                client[WRITER].write(first_msg.encode())
+                await client[WRITER].drain()
+                while self.state == ServerState.IN_GAME and game_counter == self.game_counter:
+                    reader: asyncio.StreamReader = client[READER]
+                    chars = (await reader.read(1)).decode()
+                    # print(f"got message from {client[NAME]}: {chars}")
+                    client[COUNTER] += len(chars)
+            except asyncio.CancelledError:
+                try:
+                    print("canceled1")
+                    if not self.end_msg:
+                        self.end_msg = self.end_game_message()
+                    client[WRITER].write(self.end_msg.encode())
+                    await client[WRITER].drain()
+                    client[WRITER].close()
+                    asyncio.create_task(client[WRITER].wait_closed())
+                except asyncio.CancelledError:
+                    print("cancelled2")
 
-        print("in game")
         msg = self.game_data_message()
+        print(msg)
         tasks = []
         for client in self.clients:
-            client[WRITER].write(msg.encode())
-            tasks.append(client[WRITER].drain())
-            tasks.append(make_client_listener(client, self.game_counter))
-        asyncio.gather(*tasks)
+            tasks.append(make_client_listener(client, self.game_counter, msg))
+        try:
+            tasks = asyncio.gather(*tasks)
+            await asyncio.sleep(10)
+            print("heere")
+            tasks.cancel()
+        except asyncio.CancelledError:
+            print("canceled")
+        if not self.end_msg:
+            self.end_msg = self.end_game_message()
+        print(self.end_msg)
         
         #endgame
         
@@ -75,17 +104,17 @@ class Server():
                 sum_1 += client[COUNTER]
             else:
                 sum_2 += client[COUNTER]
-        msg = "Game over!\nGroup 1 typed in " + str(sum_1) + " characters. Group 2 typed in " + str(sum_2) + " characters.\n"
+        msg = f"{bcolors.HEADER}Game over!\n{bcolors.OKBLUE}Group 1 typed in {str(sum_1)} characters. Group 2 typed in {str(sum_2)} characters.\n"
         if sum_1 > sum_2:
-            msg += "Group 1 wins!\nCongratulations to the winners:\n==\n"
+            msg += f"{bcolors.OKGREEN}Group 1 wins!\nCongratulations to the winners:\n==\n"
             for name in self.group_1:
-                msg += name + "\n"
+                msg += bcolors.BOLD + name + "\n"
         elif sum_1 < sum_2:
-            msg += "Group 2 wins!\nCongratulations to the winners:\n==\n"
+            msg += f"{bcolors.OKGREEN}Group 2 wins!\nCongratulations to the winners:\n==\n"
             for name in self.group_2:
-                msg += name + "\n"
+                msg += bcolors.BOLD + name + "\n"
         else:
-            msg += "It's a Tie!"
+            msg += f"{bcolors.OKCYAN}It's a Tie!"
         return msg
 
       
@@ -96,14 +125,14 @@ class Server():
                 self.state = ServerState.IN_GAME
                 i = 0
                 # self.end_time = time.time() + GAME_TIME
-                asyncio.create_task(self.make_game())
-                await asyncio.sleep(10)
-                print(self.end_game_message())
+                await self.make_game()
+                print("return from game")
                 self.clients.clear()
                 self.group_1.clear()
                 self.group_2.clear()
                 self.game_counter += 1
                 self.state = ServerState.SENDING_INVITES
+                self.end_msg = None
             if self.state == ServerState.SENDING_INVITES: 
                 self.udp_socket.sendto(self.invite, (config.MY_IP if config.DEBUG else '172.1.255.255', config.INVITES_PORT))
                 await asyncio.sleep(1)
@@ -114,7 +143,9 @@ class Server():
         async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
             if self.state == ServerState.SENDING_INVITES:
                 addr = writer.get_extra_info('peername')
-                print(f"Recivied connection request from {addr}")
+                if addr[0] not in ['172.1.0.117', '172.1.0.77']:
+                    return
+                # print(f"Recivied connection request from {addr}")
                 message = await reader.read(1024)
                 client_name = message.decode()
                 new_line_idx = client_name.find('\n')
