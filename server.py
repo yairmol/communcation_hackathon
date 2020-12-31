@@ -55,7 +55,6 @@ class Server():
             except Exception:
                 return
     
-
         start_game_msg = self.game_data_message()
         print(start_game_msg)
         tasks = []
@@ -133,7 +132,7 @@ class Server():
                 i = 0
             if self.state == ServerState.SENDING_INVITES: 
                 # send invite in tcp
-                self.udp_socket.sendto(self.invite, (config.MY_IP if config.DEBUG else config.BROADCAST_IP, config.INVITES_PORT))
+                self.udp_socket.sendto(self.invite, (config.BROADCAST_IP if config.DEBUG else config.BROADCAST_IP, config.INVITES_PORT))
                 await asyncio.sleep(1)
                 i += 1
 

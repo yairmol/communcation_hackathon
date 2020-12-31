@@ -24,6 +24,7 @@ class Client:
         self.char_queue = queue.Queue()
         self.stdin = None
         self.stdout = None
+        self.queue_event = None
 
     async def start(self):
         print(f"Client started, listening for offer requests...")
@@ -41,32 +42,43 @@ class Client:
             if cookie != config.MAGIC_COOKIE or flag != config.FLAG:
                 print(f"bad invite {(cookie, flag, tcp_port)} from {(ip, port)}, disregarding")
                 continue
-            print(f"Received offer from {ip}, attempting to connect...")
             try:
                 await self.join_game(ip, tcp_port)
             except Exception:
-                print("a connection error occured while playing but don't worry https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstleyVEVO")
+                # print("a connection error occured while playing but don't worry https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstleyVEVO")
+                continue
     
     async def join_game(self, ip, port):
-        self.char_queue = queue.Queue()
         try:
             # connect and receive game start message
             reader, writer = await asyncio.open_connection(ip, port)
+            print(f"Received offer from {ip}, attempting to connect...")
             writer.write(f"{self.name}\n".encode())
             await writer.drain()
             game_data = (await reader.read(config.READ_BUFFER)).decode()
             self.print_data(game_data)
         except Exception:
-            print(f"could not connect to {(ip, port)} :(")
-        queue_event = asyncio.Event()
+            # print(f"could not connect to {(ip, port)} :(")
+            return
+        self.char_queue = queue.Queue()
+        self.queue_event = asyncio.Event()
         # run a coroutine for reading typings from stdin
-        rec_task = asyncio.create_task(self.data_receive(queue_event))
+        rec_task = asyncio.create_task(self.data_receive())
         # run a coroutine for sending typings to server
-        send_task = asyncio.create_task(self.data_send(writer, queue_event))
+        send_task = asyncio.create_task(self.data_send(writer))
         await asyncio.sleep(config.GAME_TIME)
         # close coroutines
         rec_task.cancel()
         send_task.cancel()
+        # wait for tasks to be cancelled
+        try:
+            await rec_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await send_task
+        except asyncio.CancelledError:
+            pass
         # receive end game message
         end_game_msg = (await reader.read(config.READ_BUFFER)).decode()
         print("\n", end_game_msg, sep='')
@@ -77,28 +89,28 @@ class Client:
     def print_data(self, data):
         print(''.join(Colors.HEADER + data + Colors.ENDC))
 
-    async def data_send(self, writer, queue_event):
+    async def data_send(self, writer):
         try:
             while True:
-                await queue_event.wait()
+                await self.queue_event.wait()
                 c = self.char_queue.get()
                 writer.write(c.encode('utf-8'))
+                await writer.drain()
                 if self.char_queue.empty():
-                    queue_event.clear()
+                    self.queue_event.clear()
         except Exception:
             return
 
-    async def data_receive(self, queue_event):
+    async def data_receive(self):
         try:
             while True:
                 c = (await self.stdin.read(1)).decode()
                 print(c, end='')
                 sys.stdout.flush()
                 self.char_queue.put(c)
-                queue_event.set()
+                self.queue_event.set()
         except Exception:
             return
-
 
 def main():
     client = Client(config.OUR_NAME)
