@@ -1,7 +1,6 @@
 import socket
 import config
 from struct import pack, unpack, error
-import getch
 import queue
 import time
 import asyncio
@@ -10,6 +9,7 @@ import select
 import tty
 import termios
 import random
+import aioconsole
 
 class bcolors:
     HEADER = '\033[95m'
@@ -25,10 +25,6 @@ class bcolors:
 def isData():
     return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
 
-def kbhit():
-        dr, dw, de = select.select([sys.stdin], [], [], 0)
-        return dr != []
-
 GAME_TIME = 10
 
 class GameOverTimeOut(Exception):
@@ -42,79 +38,86 @@ class Client:
         self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.udp_socket.bind(('', config.INVITES_PORT))
         self.char_queue = queue.Queue()
+        self.stdin = None
+        self.stdout = None
 
     async def start(self):
         print(f"Client started, listening for offer requests...")
+        self.stdin, self.stdout = await aioconsole.get_standard_streams()
         while True:
             # wait for a game invite from a server
             msg, (ip, port) = self.udp_socket.recvfrom(7)
-            if config.DEBUG or ip not in [config.MY_IP, '172.1.0.77']:
+            if config.DEBUG and ip not in config.EXCLUSIVE_IPS:
                 continue
             try:
-                cookie, flag, tcp_port = unpack('!IbH', msg)
+                cookie, flag, tcp_port = unpack(config.PACKING_FORMAT, msg)
             except error:
                 continue
             # check validity
-            if cookie != 0xfeedbeef or flag != 2:
+            if cookie != config.MAGIC_COOKIE or flag != config.FLAG:
                 print(f"bad invite {(cookie, flag, tcp_port)} from {(ip, port)}, disregarding")
                 continue
             print(f"Received offer from {ip}, attempting to connect...")
-            await self.join_game(ip, tcp_port)
+            try:
+                await self.join_game(ip, tcp_port)
+            except Exception:
+                print("a connection error occured while playing but don't worry https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstleyVEVO")
     
     async def join_game(self, ip, port):
-        print(f"open connection to {(ip, port)}")
-        reader, writer = await asyncio.open_connection(ip, port)
-        writer.write(f"{self.name}\n".encode())
-        await writer.drain()
-        game_data = (await reader.read(1024)).decode()
-        self.print_data(game_data)
-        receiving_thread = self.data_receive()
-        sending_thread = self.data_send(writer)
-        rec_task = asyncio.create_task(receiving_thread)
-        send_task = asyncio.create_task(sending_thread)
-        await asyncio.sleep(10)
+        self.char_queue = queue.Queue()
+        try:
+            # connect and receive game start message
+            reader, writer = await asyncio.open_connection(ip, port)
+            writer.write(f"{self.name}\n".encode())
+            await writer.drain()
+            game_data = (await reader.read(config.READ_BUFFER)).decode()
+            self.print_data(game_data)
+        except Exception:
+            print(f"could not connect to {(ip, port)} :(")
+        queue_event = asyncio.Event()
+        # run a coroutine for reading typings from stdin
+        rec_task = asyncio.create_task(self.data_receive(queue_event))
+        # run a coroutine for sending typings to server
+        send_task = asyncio.create_task(self.data_send(writer, queue_event))
+        await asyncio.sleep(config.GAME_TIME)
+        # close coroutines
         rec_task.cancel()
         send_task.cancel()
-        self.char_queue = queue.Queue()
-        msg = (await reader.read(2048)).decode()
-        print("\n",msg)
+        # receive end game message
+        end_game_msg = (await reader.read(config.READ_BUFFER)).decode()
+        print("\n", end_game_msg, sep='')
+        # close connection
         writer.close()
         await writer.wait_closed()
-        print("closed")
 
     def print_data(self, data):
-
         print(''.join(bcolors.HEADER + data))
-        
 
-    async def data_send(self, writer):
+    async def data_send(self, writer, queue_event):
         try:
             while True:
-                if not self.char_queue.empty():
-                    writer.write(self.char_queue.get().encode('utf-8'))
-                else:
-                    await asyncio.sleep(0.00001)
-        except asyncio.CancelledError:
+                await queue_event.wait()
+                c = self.char_queue.get()
+                writer.write(c.encode('utf-8'))
+                if self.char_queue.empty():
+                    queue_event.clear()
+        except Exception:
             return
 
-    async def data_receive(self):
+    async def data_receive(self, queue_event):
         try:
             while True:
-                if True: #isData():
-                    if not kbhit():
-                        continue
-                    c = getch.getche()
-                    # c = sys.stdin.read(1)
-                    # print(c, end='')
-                    # sys.stdout.flush()
-                    self.char_queue.put(c)
-                    await asyncio.sleep(0.00001)
-        except asyncio.CancelledError:
+                c = (await self.stdin.read(1)).decode()
+                print(c, end='')
+                sys.stdout.flush()
+                self.char_queue.put(c)
+                queue_event.set()
+        except Exception:
             return
 
 
 def main():
-    client = Client("LMAO")
+    client = Client(config.OUR_NAME)
     old_settings = termios.tcgetattr(sys.stdin)
     try:
         tty.setcbreak(sys.stdin.fileno())
