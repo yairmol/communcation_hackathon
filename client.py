@@ -46,7 +46,7 @@ class Client:
             try:
                 await self.join_game(ip, tcp_port)
             except Exception:
-                # print("a connection error occured while playing but don't worry https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstleyVEVO")
+                print(f"{Colors.WARNING}\nA connection error occured while playing but don't worry https://www.youtube.com/watch?v=dQw4w9WgXcQ&ab_channel=RickAstleyVEVO {Colors.ENDC}")
                 continue
     
     async def join_game(self, ip, port):
@@ -54,13 +54,13 @@ class Client:
             # connect and receive game start message
             reader, writer = await asyncio.open_connection(ip, port)
             print(f"Received offer from {ip}, attempting to connect...")
-            writer.write(f"{self.name}\n".encode())
-            await writer.drain()
-            game_data = (await reader.read(config.READ_BUFFER)).decode()
-            self.print_data(game_data)
         except Exception:
             # print(f"could not connect to {(ip, port)} :(")
             return
+        writer.write(f"{self.name}\n".encode())
+        await writer.drain()
+        game_data = (await reader.read(config.READ_BUFFER)).decode()
+        self.print_data(game_data)
         self.char_queue = queue.Queue()
         self.queue_event = asyncio.Event()
         # run a coroutine for reading typings from stdin

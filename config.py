@@ -24,7 +24,7 @@ READ_BUFFER = 2048
 PACKING_FORMAT = "!IbH"
 
 # debug config
-EXCLUSIVE_IPS = ['172.1.0.77', '172.1.0.117']
+EXCLUSIVE_IPS = ['172.1.0.77', '172.1.0.117', '172.1.0.122']
 DEBUG = False
 
 # colors
