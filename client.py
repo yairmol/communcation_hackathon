@@ -2,30 +2,14 @@ import socket
 import config
 from struct import pack, unpack, error
 import queue
-import time
 import asyncio
 import sys
 import select
 import tty
 import termios
-import random
 import aioconsole
+from config import Colors
 
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-def isData():
-    return select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
-
-GAME_TIME = 10
 
 class GameOverTimeOut(Exception):
     pass
@@ -91,7 +75,7 @@ class Client:
         await writer.wait_closed()
 
     def print_data(self, data):
-        print(''.join(bcolors.HEADER + data))
+        print(''.join(Colors.HEADER + data + Colors.ENDC))
 
     async def data_send(self, writer, queue_event):
         try:

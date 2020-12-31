@@ -4,7 +4,7 @@ from struct import pack, unpack
 import asyncio
 from enum import Enum, auto
 import random
-import time
+from config import Colors
 
 NAME = 0
 ADDR = 1
@@ -12,19 +12,6 @@ READER = 2
 WRITER = 3
 COUNTER = 4
 GROUP = 5
-
-GAME_TIME = 10
-
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
 class ServerState(Enum):
     SENDING_INVITES = auto()
@@ -113,19 +100,19 @@ class Server():
                 sum_1 += client[COUNTER]
             else:
                 sum_2 += client[COUNTER]
-        msg = f"{bcolors.HEADER}Game over!\n{bcolors.OKBLUE}Group 1 typed in {str(sum_1)} characters. Group 2 typed in {str(sum_2)} characters.\n"
+        msg = f"{Colors.HEADER}Game over!\n{Colors.OKBLUE}Group 1 typed in {str(sum_1)} characters. Group 2 typed in {str(sum_2)} characters.\n"
         if sum_1 > sum_2:
-            msg += f"{bcolors.OKGREEN}Group 1 wins!\nCongratulations to the winners:\n==\n"
+            msg += f"{Colors.OKGREEN}Group 1 wins!\nCongratulations to the winners:\n==\n"
             for name in self.group_1:
-                msg += bcolors.BOLD + name + "\n"
+                msg += Colors.BOLD + name + "\n"
         elif sum_1 < sum_2:
-            msg += f"{bcolors.OKGREEN}Group 2 wins!\nCongratulations to the winners:\n==\n"
+            msg += f"{Colors.OKGREEN}Group 2 wins!\nCongratulations to the winners:\n==\n"
             for name in self.group_2:
-                msg += bcolors.BOLD + name + "\n"
+                msg += Colors.BOLD + name + "\n"
         else:
-            msg += f"{bcolors.OKCYAN}It's a Tie!\n"
-        msg += f"{bcolors.BOLD}The best player is {best_name} !!!\n" if best_name else "No best player :("
-        return msg
+            msg += f"{Colors.OKCYAN}It's a Tie!\n"
+        msg += f"{Colors.BOLD}The best player is {best_name} !!!\n" if best_name else "No best player :("
+        return (msg + Colors.ENDC)
 
     def clean_up(self):
         self.clients.clear()
