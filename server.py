@@ -149,7 +149,7 @@ class Server():
                 if new_line_idx != -1:
                     client_name = client_name[:new_line_idx]
                 # group client
-                group = random.randint(1, 2)
+                group = random.randint(1, 2) #group number
                 self.clients.append([client_name, addr, reader, writer, 0, group])
                 if group == 1:
                     self.group_1.append(client_name)

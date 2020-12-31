@@ -10,6 +10,7 @@ import termios
 import aioconsole
 from config import Colors
 
+RECIVE = 7
 
 class GameOverTimeOut(Exception):
     pass
@@ -31,7 +32,7 @@ class Client:
         self.stdin, self.stdout = await aioconsole.get_standard_streams()
         while True:
             # wait for a game invite from a server
-            msg, (ip, port) = self.udp_socket.recvfrom(7)
+            msg, (ip, port) = self.udp_socket.recvfrom(RECIVE)
             if config.DEBUG and ip not in config.EXCLUSIVE_IPS:
                 continue
             try:
